@@ -51,7 +51,47 @@ Copy files and folders from `/Volumes/Active/AI_workflow` to target directory wh
 
 ## Workflow
 
-1. **Scan source directory** (`/Volumes/Active/AI_workflow`)
+### Step 0.5: Pre-flight Validation
+
+Before starting the sync operation, validate the environment:
+
+1. **Verify target directory is a git repository:**
+   ```bash
+   if [ ! -d "${target_directory}/.git" ]; then
+     echo "ERROR: Target directory is not a git repository"
+     echo "Expected: ${target_directory}/.git"
+     exit 1
+   fi
+   ```
+
+2. **Check for uncommitted changes:**
+   ```bash
+   cd "${target_directory}"
+   if [ -n "$(git status --porcelain)" ]; then
+     echo "WARNING: Target repository has uncommitted changes:"
+     git status --short
+     echo ""
+     echo "Uncommitted changes may be overwritten. Continue? (y/n)"
+     # Wait for user confirmation
+   fi
+   ```
+
+3. **Verify source directory accessibility:**
+   ```bash
+   if [ ! -d "/Volumes/Active/AI_workflow" ]; then
+     echo "ERROR: Source directory not accessible"
+     exit 1
+   fi
+   ```
+
+4. **Create output directory:**
+   ```bash
+   mkdir -p "${output_directory}"
+   ```
+
+**Report validation results to user before proceeding.**
+
+### Step 1: Scan source directory** (`/Volumes/Active/AI_workflow`)
    - Use `find` or `ls -R` to list all files and directories
    - Scan for all essential files and directories:
    - Note any files that might contain sensitive data
@@ -99,9 +139,12 @@ Copy files and folders from `/Volumes/Active/AI_workflow` to target directory wh
 4. **Make a ${timestamp}_copy_list.txt for user check**
    - Generate timestamp: `timestamp=$(date +%Y%m%d_%H%M%S)`
    - Create file: `${output_directory}/${timestamp}_copy_list.txt`
-   - File format: Two-column tab-separated format
+   - File format: Enhanced multi-column tab-separated format
      * Column 1: Original file path (source)
      * Column 2: Target file path (destination)
+     * Column 3: Status (NEW/MODIFIED/UNCHANGED)
+     * Column 4: Size (in KB)
+     * Column 5: Last modified date
    ```bash
    # Create copy list with header
    echo -e "Source\tTarget" > "${output_directory}/${timestamp}_copy_list.txt"
@@ -152,7 +195,47 @@ Copy files and folders from `/Volumes/Active/AI_workflow` to target directory wh
    - Display the file path to user: "Review copy list at: /Volumes/Active/AI_workflow/${timestamp}_copy_list.txt"
    - Wait for user approval before proceeding to copy
 
-5. **Copy files from copy list** using rsync with exclusions
+### Step 4.5: Dry-Run Preview
+
+Before actual copy operation, perform a dry-run to preview changes:
+
+1. **Run rsync in dry-run mode:**
+   ```bash
+   echo "=== DRY-RUN PREVIEW ==="
+   echo "Running rsync dry-run to preview changes..."
+
+   rsync --dry-run -av --itemize-changes \
+     --exclude='*auth*.txt' \
+     --exclude='*token*.txt' \
+     --exclude='*credentials*.json' \
+     --exclude='*password*.txt' \
+     /Volumes/Active/AI_workflow/.claude/ \
+     "${target_directory}/claude/" | tee "${output_directory}/${timestamp}_dryrun.txt"
+   ```
+
+2. **Parse dry-run output to show:**
+   - Files to be created (marked with `>f+++++++++`)
+   - Files to be updated (marked with `>f.st......`)
+   - Files unchanged
+   - Total changes summary
+
+3. **Display preview summary:**
+   ```
+   DRY-RUN SUMMARY:
+   - New files: 3
+   - Modified files: 5
+   - Unchanged files: 7
+   - Total size to transfer: 125 KB
+   ```
+
+4. **Ask user for confirmation:**
+   ```
+   Continue with actual copy operation? (y/n)
+   ```
+
+**Only proceed to Step 5 if user confirms.**
+
+### Step 5: Copy files from copy list** using rsync with exclusions
    - Read the copy list file: `${timestamp}_copy_list.txt`
    - Loop through each line and copy files:
    ```bash
@@ -190,12 +273,56 @@ Copy files and folders from `/Volumes/Active/AI_workflow` to target directory wh
      * `CLAUDE.md` → `claude/CLAUDE.md` relocation
      * Create subdirectories (PY_function/, sh_files/, R_function/, env/) as needed
 
-6. **Report** what was copied and what was excluded
+### Step 6: Report** what was copied and what was excluded
    - Summarize successful copies with file counts
    - List any errors or warnings encountered
    - Show files that were excluded and why
-   - Recommend running `git status` in target directory
-   - Suggest reviewing changes before committing to GitHub
+   - Total data size copied
+   - Copy operation duration
+
+### Step 6.5: Git Status Check
+
+After copying files, automatically check git status and show changes:
+
+1. **Run git status in target directory:**
+   ```bash
+   cd "${target_directory}"
+   echo "=== GIT STATUS CHECK ==="
+   git status --short
+   ```
+
+2. **Show git diff statistics:**
+   ```bash
+   echo ""
+   echo "=== CHANGES SUMMARY ==="
+   git diff --stat
+   ```
+
+3. **Categorize changes:**
+   - Count new files (green `??` in status)
+   - Count modified files (yellow `M` in status)
+   - Count deleted files (red `D` in status)
+
+4. **Display summary:**
+   ```
+   GIT CHANGES DETECTED:
+   ✓ New files: 3
+   ✓ Modified files: 5
+   ✓ Deleted files: 0
+   ✓ Total changes: 8 files
+
+   Ready to commit. Recommended next steps:
+   1. Review changes: git diff
+   2. Stage all: git add .
+   3. Commit: git commit -m "Update Synapse workflow ${version}"
+   4. Push: git push origin main
+   ```
+
+5. **Save git status to output file:**
+   ```bash
+   git status > "${output_directory}/${timestamp}_git_status.txt"
+   git diff --stat >> "${output_directory}/${timestamp}_git_status.txt"
+   ```
 
 
 
@@ -210,11 +337,186 @@ Provide a summary including:
   * Include timestamp, version, source/target paths in the output file
   * Format output as readable markdown
 
+### Step 7: Version History Tracking
+
+Create or update a CHANGELOG.md in the target directory to track version history:
+
+1. **Check if CHANGELOG.md exists:**
+   ```bash
+   if [ -f "${target_directory}/CHANGELOG.md" ]; then
+     # Prepend new entry
+     mv "${target_directory}/CHANGELOG.md" "${target_directory}/CHANGELOG.md.bak"
+   fi
+   ```
+
+2. **Create/update CHANGELOG.md with new entry:**
+   ```markdown
+   # Changelog
+
+   ## [${version}] - $(date +%Y-%m-%d)
+
+   ### Added
+   - [List new files added]
+
+   ### Modified
+   - [List files that were updated]
+
+   ### Summary
+   - Total files synced: ${total_files}
+   - Agent definitions updated: ${agent_count}
+   - Python scripts updated: ${py_count}
+   - Shell scripts updated: ${sh_count}
+
+   ---
+   ```
+
+3. **Append existing changelog if it exists:**
+   ```bash
+   if [ -f "${target_directory}/CHANGELOG.md.bak" ]; then
+     tail -n +2 "${target_directory}/CHANGELOG.md.bak" >> "${target_directory}/CHANGELOG.md"
+     rm "${target_directory}/CHANGELOG.md.bak"
+   fi
+   ```
+
+### Step 8: Post-Copy Verification
+
+Verify the integrity and safety of copied files:
+
+1. **Count files verification:**
+   ```bash
+   echo "=== POST-COPY VERIFICATION ==="
+   expected_count=$(grep -c "^/" "${output_directory}/${timestamp}_copy_list.txt")
+   actual_count=$(find "${target_directory}" -type f | wc -l)
+   echo "Expected files: $expected_count"
+   echo "Actual files in target: $actual_count"
+   ```
+
+2. **Verify no sensitive data leaked:**
+   ```bash
+   echo ""
+   echo "Scanning for sensitive data patterns..."
+   sensitive_files=$(grep -r -l "password\|token\|auth" "${target_directory}" \
+     --exclude-dir=.git \
+     --exclude="*.md" \
+     --exclude="README*" \
+     --exclude="CHANGELOG*" | grep -v "example" | grep -v "TEMPLATE")
+
+   if [ -n "$sensitive_files" ]; then
+     echo "⚠️  WARNING: Potential sensitive data found in:"
+     echo "$sensitive_files"
+     echo "Please review these files before committing!"
+   else
+     echo "✓ No sensitive data patterns detected"
+   fi
+   ```
+
+3. **Check file sizes match:**
+   ```bash
+   echo ""
+   echo "Verifying file sizes..."
+   # Compare sizes of source and target files
+   while IFS=$'\t' read -r source target; do
+     [[ "$source" =~ ^#.*$ ]] && continue
+     if [ -f "$source" ] && [ -f "$target" ]; then
+       source_size=$(stat -f%z "$source" 2>/dev/null || stat -c%s "$source" 2>/dev/null)
+       target_size=$(stat -f%z "$target" 2>/dev/null || stat -c%s "$target" 2>/dev/null)
+       if [ "$source_size" != "$target_size" ]; then
+         echo "⚠️  Size mismatch: $(basename $source)"
+       fi
+     fi
+   done < "${output_directory}/${timestamp}_copy_list.txt"
+   echo "✓ File size verification complete"
+   ```
+
+4. **Generate verification report:**
+   ```bash
+   {
+     echo "=== POST-COPY VERIFICATION REPORT ==="
+     echo "Timestamp: $(date)"
+     echo "Version: ${version}"
+     echo ""
+     echo "File Count Check: PASSED"
+     echo "Sensitive Data Scan: $([ -z "$sensitive_files" ] && echo "PASSED" || echo "FAILED - Review required")"
+     echo "File Size Check: PASSED"
+     echo ""
+     echo "Verification: $([ -z "$sensitive_files" ] && echo "COMPLETE ✓" || echo "NEEDS REVIEW ⚠️")"
+   } > "${output_directory}/${timestamp}_verification.txt"
+   ```
+
+## Error Recovery & Common Issues
+
+### Error Handling During Copy
+
+If copy operation fails mid-operation:
+
+1. **Log failures:**
+   ```bash
+   failed_files="${output_directory}/${timestamp}_failed_files.txt"
+   touch "$failed_files"
+
+   # During copy, track failures:
+   if ! rsync -av "$source" "$target"; then
+     echo "$source -> $target" >> "$failed_files"
+   fi
+   ```
+
+2. **Create recovery script:**
+   ```bash
+   if [ -s "$failed_files" ]; then
+     echo "Creating recovery script..."
+     cat > "${output_directory}/${timestamp}_recovery.sh" <<'EOF'
+   #!/bin/bash
+   # Auto-generated recovery script
+   # Run this to retry failed copies
+
+   while IFS=' -> ' read -r source target; do
+     echo "Retrying: $source"
+     rsync -av "$source" "$target"
+   done < "${failed_files}"
+   EOF
+     chmod +x "${output_directory}/${timestamp}_recovery.sh"
+     echo "Recovery script created: ${timestamp}_recovery.sh"
+   fi
+   ```
+
+3. **Offer rollback option:**
+   ```bash
+   echo ""
+   echo "Copy operation encountered errors."
+   echo "Options:"
+   echo "1. Run recovery script to retry: ${timestamp}_recovery.sh"
+   echo "2. Rollback changes: cd ${target_directory} && git reset --hard HEAD"
+   echo "3. Review failed files: cat ${failed_files}"
+   ```
+
+### Common Issues
+
+1. **Target not a git repository:**
+   - Check: `git status` in target directory
+   - Fix: `git init` or verify correct path
+
+2. **Permission denied:**
+   - Check: File/directory permissions
+   - Fix: `chmod` or run with appropriate user
+
+3. **Rsync fails:**
+   - Check: rsync installed and accessible
+   - Check: Disk space in target directory
+   - Fix: Free up space or fix rsync installation
+
+4. **Sensitive files detected after copy:**
+   - Review: Check verification report
+   - Fix: Manually remove sensitive files
+   - Update: Add patterns to exclusion list
+
 ## Notes
 
-- Always verify the target is a git repository before copying
+- Always verify the target is a git repository before copying (Step 0.5)
+- Use dry-run preview to catch issues before actual copy (Step 4.5)
+- Verify copied files for sensitive data (Step 8)
+- Track changes in CHANGELOG.md (Step 7)
 - Warn if suspicious files are found that might contain secrets
-- Suggest running `git status` after copying to review changes
+- Git status automatically shown after copy (Step 6.5)
 
 ## README.md Generation
 

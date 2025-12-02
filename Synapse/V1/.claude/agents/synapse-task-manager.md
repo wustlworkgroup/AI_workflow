@@ -68,14 +68,28 @@ Before proceeding, validate the CSV file format and contents:
    - Check synapse_id format matches `syn[0-9]+` pattern
    - Verify save_path is not empty
    - Count total items to download
-   - Warn if save_path directories already exist (potential overwrite)
+   - Identify if items are files or folders (if determinable from context)
+   - Note primary destination paths
 
-3. **Report validation results:**
+3. **Report validation results with summary:**
+
+   **For Upload Tasks:**
    ```
    ✅ CSV validation passed:
-   - Found {count} items to [upload/download]
+   - Found {count} files to upload
    - All required columns present
-   - All IDs/paths valid
+   - All file paths valid
+   - Destination: Synapse folder {synapse_parent_id}
+   ```
+
+   **For Download Tasks:**
+   ```
+   ✅ CSV validation passed:
+   - Found {count} items to download ({X} files, {Y} folders)
+   - All required columns present
+   - All Synapse IDs valid (syn format)
+   - Primary destination: {main_save_path}
+   - Synapse IDs: {list of IDs}
    ```
 
 If validation fails, report specific errors and STOP. Ask user to fix CSV file.
@@ -209,35 +223,42 @@ python3 /Volumes/Active/AI_workflow/PY_function/ris_ssh_connect.py \
 
 ### Step 5: Create Task Record
 
-**For Upload Tasks:**
-2. Capture job information from the output:
+1. **Capture job information from the output:**
+
+   **For Upload Tasks:**
    - Look for: "Synapse upload job submitted with ID: {job_id}"
    - Job info is saved at: `/storage1/fs1/hirbea/Active/AI_workflow/gatk/{job_id}_INFO.txt`
 
-**For Download Tasks:**
-2. Capture job information from the output:
+   **For Download Tasks:**
    - Look for: "Synapse download job submitted with ID: {job_id}"
    - Job info is saved at: `/storage1/fs1/hirbea/Active/AI_workflow/gatk/{job_id}_INFO.txt`
    - Format: `<job_id> <jobname> <output_file> <output_dir>`
 
-3. Create task record at `{project_path}/task/task_YYYYMMDD_HHMMSS.md`:
+2. **Get current timestamp:**
+   ```bash
+   timestamp=$(python3 /Volumes/Active/AI_workflow/PY_function/ris_ssh_connect.py \
+     /Volumes/Active/AI_workflow/env/autho.txt \
+     --cmd "date '+%Y%m%d_%H%M%S'")
+   ```
 
-   Use the Write tool to create the task file locally with this template and save it:
+3. **Create task record** at `/Volumes/Active/AI_workflow/Project/{project_name}/task/task_${timestamp}.md`:
 
+   Use the Write tool to create the task file locally with this template:
+
+   **For Upload Tasks:**
    ```markdown
    # Task Record: {timestamp}
 
    **Job ID:** {job_id}
    **Job Name:** {job_name}
-   **Output File:** /storage1/fs1/hirbea/Active/AI_workflow/gatk/{job_id}_INFO.txt
+   **Output File:** {output_file}
    **Project:** {project_name}
    **Status:** running
 
    ## Parameters
    - CSV File: {csv_file_name}
-   - Items to [upload/download]: {count}
-   - Synapse Parent ID: {synapse_parent_id} (upload tasks only)
-   - Output Directory: {output_dir} (download tasks only)
+   - Items to upload: {count}
+   - Synapse Parent ID: {synapse_parent_id}
 
    ## RIS Resource Allocation
    - Memory: {memory}
@@ -247,36 +268,77 @@ python3 /Volumes/Active/AI_workflow/PY_function/ris_ssh_connect.py \
 
    ## Estimated Completion
    - Items queued: {count}
-   - Estimated duration: {estimate based on typical speeds - optional}
-   - Monitor status: See Step 5.5 below
+   - Estimated duration: {estimate based on typical speeds}
+   - Monitor status: See commands below
 
    ## Execution Command
    ```bash
-   # For upload tasks (option 1)
    python3 /Volumes/Active/AI_workflow/PY_function/ris_ssh_connect.py \
      /Volumes/Active/AI_workflow/env/autho.txt \
      --cmd "cd /storage1/fs1/hirbea/Active/AI_workflow/Project/{project_name} && bash All_in_one_AIworkflow.sh 1"
+   ```
 
-   # For download tasks (option 2)
+   ## Job Status Check Commands
+   ```bash
+   # Check job status
+   python3 /Volumes/Active/AI_workflow/PY_function/ris_ssh_connect.py \
+     /Volumes/Active/AI_workflow/env/autho.txt \
+     --cmd "bjobs {job_id}"
+
+   # View output file (last 50 lines)
+   python3 /Volumes/Active/AI_workflow/PY_function/ris_ssh_connect.py \
+     /Volumes/Active/AI_workflow/env/autho.txt \
+     --cmd "cat {output_file} | tail -50"
+   ```
+   ```
+
+   **For Download Tasks:**
+   ```markdown
+   # Task Record: {timestamp}
+
+   **Job ID:** {job_id}
+   **Job Name:** {job_name}
+   **Output File:** {output_file}
+   **Project:** {project_name}
+   **Status:** running
+
+   ## Parameters
+   - CSV File: {csv_file_name}
+   - Items to download: {count} ({file_or_folder_summary})
+   - Output Directory: {output_dir}
+   - Target Save Path: {primary_save_path if available}
+
+   ## RIS Resource Allocation
+   - Memory: {memory}
+   - Cores: {cores}
+   - Time Limit: {time_limit}h
+   - Docker Image: {docker_image}
+
+   ## Estimated Completion
+   - Items queued: {count}
+   - Estimated duration: Depends on file sizes and network speed
+   - Monitor status: See commands below
+
+   ## Execution Command
+   ```bash
    python3 /Volumes/Active/AI_workflow/PY_function/ris_ssh_connect.py \
      /Volumes/Active/AI_workflow/env/autho.txt \
      --cmd "cd /storage1/fs1/hirbea/Active/AI_workflow/Project/{project_name} && bash All_in_one_AIworkflow.sh 2"
    ```
-   get the curret date and time YYYYMMDD_HHMMSS
-  ```bash
-   timestamp=$(python3 /Volumes/Active/AI_workflow/PY_function/ris_ssh_connect.py \
-  /Volumes/Active/AI_workflow/env/autho.txt \
-  --cmd "date '+%Y%m%d_%H%M%S'")
-echo "Timestamp: $timestamp
-  ```
-  check file "{project_path}/task/task_${timestamp}.md` exist by
 
+   ## Job Status Check Commands
    ```bash
+   # Check job status
    python3 /Volumes/Active/AI_workflow/PY_function/ris_ssh_connect.py \
-  /Volumes/Active/AI_workflow/env/autho.txt \
-  --cmd "cd /storage1/fs1/hirbea/Active/AI_workflow/Project/{project_name}/task && ls task_${timestamp}.md"
+     /Volumes/Active/AI_workflow/env/autho.txt \
+     --cmd "bjobs {job_id}"
+
+   # View output file (last 50 lines)
+   python3 /Volumes/Active/AI_workflow/PY_function/ris_ssh_connect.py \
+     /Volumes/Active/AI_workflow/env/autho.txt \
+     --cmd "cat {output_file} | tail -50"
    ```
-   if it is missing, save it again.
+   ```
 
 ### Step 5.5: Initial Status Check (Optional)
 
@@ -295,25 +357,36 @@ python3 /Volumes/Active/AI_workflow/PY_function/ris_ssh_connect.py \
 
 If status is `EXIT`, report error and suggest checking output file.
 
-### Step 6: Offer Monitoring Options
+### Step 6: Provide Quick Status Summary & Offer Monitoring Options
 
-After successful submission, ALWAYS ask the user:
+After successful submission, provide an immediate status summary and ask about monitoring:
+
+**Quick Status Summary Template:**
+```
+✅ Synapse [upload/download] task started successfully!
+
+**Job Status:**
+- **Job ID:** {job_id}
+- **Status:** {current_status} (RUN/PEND)
+- **Project:** {project_name}
+- **Items to [upload/download]:** {count} {items_summary}
+- **Destination:** {destination_path or synapse_parent_id}
+
+**Output file:** gatk/{output_filename}
+```
+
+Then ALWAYS ask the user:
 
 ```
-Job {job_id} submitted successfully!
-
 Would you like me to:
-1. Monitor the job status now?
-2. Set up automatic monitoring (pass to synapse-error-monitor agent)?
-3. Just notify when I should check it later?
-
-Type 1, 2, or 3 to choose.
+1. Monitor the job status now
+2. Set up automatic monitoring
+3. Check later
 ```
 
 **Only pass to synapse-error-monitor agent if user chooses option 2 or explicitly requests monitoring.**
 
-
-   **Do NOT automatically start monitoring** - wait for user's instruction.
+**Do NOT automatically start monitoring** - wait for user's instruction.
 
 ## CSV File Format
 

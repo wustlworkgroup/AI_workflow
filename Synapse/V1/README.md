@@ -1,43 +1,57 @@
-# Synapse Upload Workflow - Claude AI Agents
+# Synapse Upload & Download Workflow - Claude AI Agents
 
-AI-powered automation workflow for uploading files to Synapse using Claude Code agents on the RIS (Research Infrastructure Services) cluster at WUSTL.
+AI-powered automation workflow for uploading and downloading files to/from Synapse using Claude Code agents on the RIS (Research Infrastructure Services) cluster at WUSTL.
 
 ## Overview
 
-This repository contains Claude AI agents and scripts for automated Synapse file uploads with LSF job management on the RIS cluster.
+This repository contains Claude AI agents and scripts for automated Synapse file uploads and downloads with LSF job management on the RIS cluster.
 
 **Version:** V1
-**Generated:** October 14, 2025
+**Last Sync:** 2025-12-02 09:54:44
 
 ## Features
 
-- 🤖 Automated Synapse file uploads via Claude AI agents
+- 🤖 Automated Synapse file uploads and downloads via Claude AI agents
 - 📊 CSV-based file annotation management
 - 🖥️ RIS cluster integration with LSF job scheduling
 - 🔍 Real-time job monitoring and error detection
 - 🐳 Docker containerization support
+- 📥 Download files from Synapse folders or CSV lists
 
 ## Repository Structure
 
 ```
 .
-├── claude/                          # Claude AI agent definitions
+├── .claude/                         # Claude AI agent definitions (NEW structure)
+│   └── agents/
+│       ├── synapse-task-manager.md      # Manages Synapse upload/download tasks
+│       ├── synapse-error-monitor.md     # Monitors LSF jobs and errors
+│       └── synapse-github-remote.md     # Syncs files to GitHub
+├── claude/                          # Legacy agent definitions
 │   ├── agents/
 │   │   ├── synapse-task-manager.md      # Manages Synapse upload tasks
 │   │   ├── synapse-error-monitor.md     # Monitors LSF jobs and errors
 │   │   ├── synapse-github-remote.md     # Syncs files to GitHub
+│   │   ├── samtools-task-manager.md     # Manages Samtools BAM operations
 │   │   └── ris-login.md                 # Handles RIS SSH authentication
 │   └── CLAUDE.md                        # Claude Code project instructions
 ├── PY_function/
-│   └── synapse_uploading2.py            # Synapse upload Python script
+│   ├── synapse_uploading2.py            # Synapse upload Python script
+│   └── synapse_download.py              # Synapse download Python script
 ├── sh_files/
-│   └── 1_Docker_synapse_uploading2.sh   # Docker wrapper for uploads
+│   ├── 1_Docker_synapse_uploading2.sh   # Docker wrapper for uploads
+│   └── 1_Docker_synapse_download.sh     # Docker wrapper for downloads
 ├── env/
 │   └── config_synapse.sh                # Synapse configuration template
 ├── Project/
+│   ├── 10172025_BAM_transfer/           # Example BAM transfer workflow
+│   │   ├── config_synapse.sh                # Synapse configuration
+│   │   └── All_in_one_AIworkflow.sh         # Workflow orchestration script
 │   ├── All_in_one_AIworkflow.sh         # Main workflow orchestration script
 │   └── test_annotations.csv             # Example annotation file
-└── README.md                            # This file
+├── CLAUDE.md                        # Repository instructions (root level)
+├── CHANGELOG.md                     # Version history and changes
+└── README.md                        # This file
 ```
 
 ## Prerequisites
@@ -53,7 +67,7 @@ This repository contains Claude AI agents and scripts for automated Synapse file
 1. Clone this repository:
    ```bash
    git clone <repository-url>
-   cd AI_workflow
+   cd Synapse/V1
    ```
 
 2. Copy the `claude/` directory to your working directory as `.claude/`:
@@ -104,36 +118,24 @@ Create a Synapse authentication token file:
    Ask Claude: "Start synapse upload for syn12345678, folder 10172025_BAM_transfer, csv synapse_annotations.csv"
    ```
 
-2. **Monitor job status:**
+2. **Download files from Synapse:**
+   ```
+   Ask Claude: "Download files from Synapse folder syn12345678 to /path/to/download"
+   ```
+
+3. **Monitor job status:**
    ```
    Ask Claude: "Check job status"
    ```
 
-3. **Sync files to GitHub:**
+4. **Sync files to GitHub:**
    ```
    Ask Claude: "Use synapse-github-remote agent"
    ```
 
-### Manual Workflow Execution
+### CSV Annotation Format
 
-1. Prepare your annotation CSV file in `Project/<your_project>/Sample_manifest/`
-2. Configure `All_in_one_AIworkflow.sh` with your project details
-3. Run on RIS cluster:
-   ```bash
-   bsub < submit_script.sh
-   ```
-
-## CSV Annotation Format
-
-Your `synapse_annotations.csv` must include:
-
-| Column | Description | Required |
-|--------|-------------|----------|
-| `files` | Full path to file | Yes |
-| `resourceType` | Type of resource | No |
-| `dataType` | Type of data | No |
-| `specimenID` | Specimen identifier | No |
-| `assay` | Assay type | No |
+Create a CSV file with the following structure for uploads:
 
 **Example:**
 ```csv
@@ -146,11 +148,17 @@ files,resourceType,dataType,specimenID,assay
 ### synapse-task-manager
 Executes Synapse upload workflows by preparing and running the All_in_one_AIworkflow.sh script.
 
+### synapse-download
+Downloads files from Synapse using `synapse_download.py`. Supports downloading from folders or CSV lists of Synapse IDs.
+
 ### synapse-error-monitor
 Monitors LSF jobs and analyzes errors from RIS cluster output files.
 
 ### synapse-github-remote
 Copies essential files to GitHub repository while excluding sensitive data.
+
+### samtools-task-manager
+Manages Samtools operations like BAM integrity checking and BAI index generation.
 
 ### ris-login
 Handles RIS cluster SSH authentication, connection, and session management.
@@ -171,6 +179,7 @@ Handles RIS cluster SSH authentication, connection, and session management.
 1. **Authentication failed:** Check your `auth.txt` format and credentials
 2. **Job not starting:** Verify RIS cluster access and LSF availability
 3. **Upload errors:** Check Synapse token validity and parent folder permissions
+4. **Download errors:** Verify Synapse IDs are correct and you have read permissions
 
 ### Getting Help
 
@@ -180,15 +189,14 @@ Handles RIS cluster SSH authentication, connection, and session management.
 
 ## Contributing
 
-Contributions are welcome! Please ensure:
-- No sensitive data in commits
-- Agent definitions follow existing patterns
-- Test on RIS cluster before submitting
+This workflow is designed for internal use at WUSTL RIS. For questions or suggestions, contact the maintainer.
 
 ## License
 
-[Add your license information here]
+Internal use only - WUSTL RIS
 
-## Contact
+---
 
-[Add contact information here]
+**Last Updated:** 2025-12-02 09:54:44
+**Maintained by:** Claude AI Agent - synapse-github-remote
+**Sync Version:** V1
