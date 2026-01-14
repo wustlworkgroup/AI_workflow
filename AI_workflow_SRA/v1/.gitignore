@@ -1,0 +1,15 @@
+# Authentication and credentials - NEVER commit these
+*auth*.txt
+*token*.txt
+*credentials*.json
+*password*.txt
+.env
+*.key
+*.pem
+
+# macOS files
+.DS_Store
+._*
+
+# Local settings
+.claude/settings.local.json
